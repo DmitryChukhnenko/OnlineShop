@@ -1,0 +1,40 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Build
+      run: dotnet build --configuration Release
+
+    - name: Test
+      run: dotnet test --no-build --verbosity normal
+
+    - name: Docker Build
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: src/Web/Dockerfile
+        tags: your-registry/online-shop-web:latest
+        push: true
+
+    - name: Deploy to Kubernetes
+      uses: azure/k8s-deploy@v4
+      with:
+        namespace: default
+        manifests: |
+          k8s/web-deployment.yaml
+          k8s/db-deployment.yaml
+        images: |
+          your-registry/online-shop-web:latest
