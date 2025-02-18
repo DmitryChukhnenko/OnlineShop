@@ -1,0 +1,27 @@
+name: CI
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 9.0.x
+        
+    - name: Build
+      run: dotnet build --configuration Release
+      
+    - name: Run Unit Tests
+      run: dotnet test --filter Category=Unit
+      
+    - name: Docker Build
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: docker/web.dockerfile
+        tags: online-shop-web:latest

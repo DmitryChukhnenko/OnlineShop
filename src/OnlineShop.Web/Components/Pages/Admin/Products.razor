@@ -1,0 +1,22 @@
+@* <MudDataGrid Items="@products" ReadData="@OnReadData">
+    <Columns>
+        <PropertyColumn Property="@(p => p.Name)" Title="Название"/>
+        <TemplateColumn Title="Фото">
+            <img src="@(context.ImageUrl)" style="max-width: 100px"/>
+        </TemplateColumn>
+        <ActionColumn>
+            <MudIconButton Icon="@Icons.Filled.Edit" 
+                           OnClick="@(() => EditProduct(context))"/>
+        </ActionColumn>
+    </Columns>
+</MudDataGrid>
+
+@code {
+    private List<ProductDto> products = new();
+    
+    private async Task OnReadData(GridState<ProductDto> state)
+    {
+        products = await productService.GetAll();
+        StateHasChanged();
+    }
+} *@
