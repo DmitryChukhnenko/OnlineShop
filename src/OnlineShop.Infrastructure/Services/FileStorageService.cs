@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Minio;
 using Minio.DataModel.Args;
+using OnlineShop.Application.Interfaces;
 
 namespace OnlineShop.Infrastructure.Services;
 
@@ -36,8 +37,4 @@ public class MinioFileStorage : IFileStorageService
         
         return $"/images/{objectName}"; // URL через Nginx
     }
-}
-
-public interface IFileStorageService {
-    public Task<string> UploadProductImage(Stream fileStream, string fileName);
 }

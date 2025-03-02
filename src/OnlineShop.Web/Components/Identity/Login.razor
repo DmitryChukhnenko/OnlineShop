@@ -1,0 +1,71 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using MudBlazor
+@using OnlineShop.Domain.DTOs
+@using OnlineShop.Application.Users.Commands;
+@using MediatR
+@inject IMediator Mediator
+@inject NavigationManager Navigation
+
+@page "/account/login"
+<PageTitle>Login</PageTitle>
+
+<MudCard>
+    <MudCardContent>
+        <MudForm @ref="_form" Model="_loginModel" OnValidSubmit="HandleLogin">
+            <MudTextField @bind-Value="_loginModel.Email" 
+                         Label="Email"
+                         InputType="InputType.Email" 
+                         Required="true" 
+                         RequiredError="Email is required"
+                         For="@(() => _loginModel.Email)"/>
+            
+            <MudTextField @bind-Value="_loginModel.Password" 
+                         Label="Password" 
+                         InputType="InputType.Password"
+                         Required="true"
+                         RequiredError="Password is required"
+                         For="@(() => _loginModel.Password)"/>
+            
+            <MudButton ButtonType="ButtonType.Submit" 
+                       Variant="Variant.Filled" 
+                       Color="Color.Primary"
+                       FullWidth="true">
+                Login
+                <MudIcon Icon="@Icons.Material.Filled.Login" />
+            </MudButton>
+        </MudForm>
+        <NavLink class="nav-link" href="account/register" Match="NavLinkMatch.All">Register</NavLink>
+    </MudCardContent>
+</MudCard>
+
+@if (_errors.Any())
+{
+    <MudAlert Severity="Severity.Error">
+        @foreach (var error in _errors)
+        {
+            <div>@error</div>
+        }
+    </MudAlert>
+}
+
+@code {
+    LoginDTO _loginModel = new();
+    private MudForm _form = new();
+    private List<string> _errors = new();
+
+    private async Task HandleLogin()
+    {
+        _errors.Clear();
+        var result = await Mediator.Send(new LoginCommand(_loginModel.Email, _loginModel.Password));
+        
+        if (result.Succeeded)
+        {
+            Navigation.NavigateTo("/home");
+        }
+        else
+        {
+            _errors.Add("Invalid email or password");
+            StateHasChanged();
+        }
+    }
+}

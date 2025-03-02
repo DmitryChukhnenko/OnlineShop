@@ -1,0 +1,90 @@
+@using MudBlazor
+@using OnlineShop.Domain.DTOs
+@using OnlineShop.Application.Users.Commands;
+@using MediatR
+@inject IMediator Mediator
+@inject NavigationManager Navigation
+
+@page "/account/register"
+<PageTitle>Register</PageTitle>
+
+<MudCard>
+    <MudCardContent>
+        <MudForm @ref="_form" Model="_createModel" OnValidSubmit="HandleRegister">
+            <MudTextField @bind-Value="_createModel.UserName"
+                         Label="User name"
+                         InputType="InputType.Text"
+                         Required="true"
+                         RequiredError="User name is required"
+                         For="@(() => _createModel.UserName)"/>
+
+            <MudTextField @bind-Value="_createModel.Email" 
+                         Label="Email" 
+                         InputType="InputType.Email"
+                         Required="true" 
+                         RequiredError="Email is required"
+                         For="@(() => _createModel.Email)"/>
+            
+            <MudTextField @bind-Value="_createModel.Password" 
+                         Label="Password" 
+                         InputType="InputType.Password"
+                         Required="true"
+                         RequiredError="Password is required"
+                         For="@(() => _createModel.Password)"/>
+
+            <MudTextField @bind-Value="_createModel.ConfirmPassword" 
+                         Label="Confirm password" 
+                         InputType="InputType.Password"
+                         Required="true"
+                         RequiredError="Confirm Password is required"
+                         For="@(() => _createModel.ConfirmPassword)"/>
+            
+            <MudButton ButtonType="ButtonType.Submit" 
+                       Variant="Variant.Filled" 
+                       Color="Color.Primary"
+                       FullWidth="true">
+                Register
+                <MudIcon Icon="@Icons.Material.Filled.AppRegistration" />
+            </MudButton>
+        </MudForm>
+        <NavLink class="nav-link" href="account/login" Match="NavLinkMatch.All">Login</NavLink>
+    </MudCardContent>
+</MudCard>
+
+@if (_errors.Any())
+{
+    <MudAlert Severity="Severity.Error">
+        @foreach (var error in _errors)
+        {
+            <div>@error</div>
+        }
+    </MudAlert>
+}
+
+@code {
+    CreateUserDTO _createModel = new();
+    private MudForm _form = new();
+    private List<string> _errors = new();
+
+    private async Task HandleRegister()
+    {
+        _errors.Clear();
+        var result = await Mediator.Send(
+            new CreateUserCommand(
+                _createModel.UserName,
+                _createModel.Email,
+                _createModel.Password,
+                _createModel.ConfirmPassword)
+        );
+        
+        if (result.Succeeded)
+        {
+            Navigation.NavigateTo("/login");
+        }
+        else
+        {
+            _errors.Add("Invalid data");
+            StateHasChanged();
+        }
+    }
+}

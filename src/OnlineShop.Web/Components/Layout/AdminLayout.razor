@@ -1,0 +1,18 @@
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using MudBlazor;
+@inherits LayoutComponentBase
+@attribute [Authorize(Roles = "Admin")]
+
+@page "/admin"
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        @Body
+    </Authorized>
+    <NotAuthorized>
+        <MudAlert Severity="Severity.Error">
+            Access denied!
+        </MudAlert>
+    </NotAuthorized>
+</AuthorizeView>

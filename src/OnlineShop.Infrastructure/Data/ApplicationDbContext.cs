@@ -14,6 +14,48 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.HasDefaultSchema("public"); // Установка схемы по умолчанию
+
+        // Конфигурация сущностей
+        modelBuilder.Entity<Product>(e => 
+        {
+            e.HasKey(p => p.Id);
+            e.Property(p => p.Id).ValueGeneratedOnAdd();
+        });
+        modelBuilder.Entity<Category>(e =>
+        {
+            e.HasKey(c => c.Id);
+            e.Property(c => c.Id).ValueGeneratedOnAdd();
+        });
+        modelBuilder.Entity<Order>(e =>
+        {
+            e.HasKey(o => o.Id);
+            e.Property(o => o.Id).ValueGeneratedOnAdd();
+        });
+        modelBuilder.Entity<PaymentDetail>(e =>
+        {
+            e.HasKey(pd => pd.Id);
+            e.Property(pd => pd.Id).ValueGeneratedOnAdd();
+        });
+        modelBuilder.Entity<OrderStatus>(e =>
+        {
+            e.HasKey(os => os.Id);
+            e.Property(os => os.Id).ValueGeneratedOnAdd();
+        });
+        modelBuilder.Entity<OrderItem>(e =>
+        {
+            e.HasKey(oi => oi.Id);
+            e.Property(oi => oi.Id).ValueGeneratedOnAdd();
+        });
+        modelBuilder.Entity<ProductReview>(e =>
+        {
+            e.HasKey(pr => pr.Id);
+            e.Property(pr => pr.Id).ValueGeneratedOnAdd();
+        });
+        modelBuilder.Entity<ApplicationUser>(e =>
+        {
+            e.HasKey(u => u.Id);
+            e.Property(u => u.Id).ValueGeneratedOnAdd();
+        });
         
         // Глобальный фильр для мягкого удаления        
         modelBuilder.Entity<Product>().HasQueryFilter(p => !p.IsDeleted);
@@ -72,9 +114,15 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
             .HasIndex(p => new { p.Name, p.SKU })
             .IsUnique();
 
-        modelBuilder.Entity<Category>()
-            .HasIndex(c => c.Slug)
-            .IsUnique();
+        modelBuilder.Entity<Category>(entity =>
+        {
+            entity.HasIndex(c => c.Slug).IsUnique();
+            
+            entity.HasOne(c => c.ParentCategory)
+                .WithMany(c => c.ChildCategories)
+                .HasForeignKey(c => c.ParentCategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
 
         modelBuilder.Entity<ApplicationUser>()
             .HasIndex(u => u.Email)

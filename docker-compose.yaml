@@ -10,12 +10,11 @@ services:
       - ConnectionStrings__HangfireConnection=${CONNECTIONSTRINGS__HANGFIRECONNECTION}
       - ASPNETCORE_URLS=http://+:${APP_PORT}
       - ConnectionStrings__DefaultConnection=${CONNECTIONSTRINGS__DEFAULTCONNECTION}
-      - Redis__Configuration=${REDIS_CONFIGURATION}
-      - Jwt__Secret=${JWT_SECRET}
-      - Jwt__Issuer=${JWT_ISSUER}
-      - Jwt__Audience=${JWT_AUDIENCE}
-      - Jwt__AccessTokenExpiration=${JWT_EXPIRE_MINUTES}
-      - Jwt__RefreshTokenExpiration=${JWT_EXPIRE_MINUTES}     
+      - Redis__Configuration=${REDIS_CONFIGURATION} 
+      - Minio__Endpoint=${MINIO_ENDPOINT}
+      - Minio__AccessKey=${MINIO_ACCESS_KEY}
+      - Minio__SecretKey=${MINIO_SECRET_KEY}
+      - Minio__BucketName=${MINIO_BUCKET} 
     depends_on:
       db:
         condition: service_healthy
@@ -41,11 +40,10 @@ services:
       - ASPNETCORE_URLS=http://+:${APP_PORT}
       - ConnectionStrings__DefaultConnection=${CONNECTIONSTRINGS__DEFAULTCONNECTION}
       - Redis__Configuration=${REDIS_CONFIGURATION}
-      - Jwt__Secret=${JWT_SECRET}
-      - Jwt__Issuer=${JWT_ISSUER}
-      - Jwt__Audience=${JWT_AUDIENCE}
-      - Jwt__AccessTokenExpiration=${JWT_EXPIRE_MINUTES}
-      - Jwt__RefreshTokenExpiration=${JWT_EXPIRE_MINUTES}    
+      - Minio__Endpoint=${MINIO_ENDPOINT}
+      - Minio__AccessKey=${MINIO_ACCESS_KEY}
+      - Minio__SecretKey=${MINIO_SECRET_KEY}
+      - Minio__BucketName=${MINIO_BUCKET}
     depends_on:
       db:
         condition: service_healthy
@@ -104,10 +102,10 @@ services:
     ports: ['${MINIO_API_PORT}:${MINIO_API_PORT}/tcp', '${MINIO_WEB_PORT}:${MINIO_WEB_PORT}/tcp'] 
     volumes: [minio_data:/data:rw]
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://${MINIO_URL}/minio/health/live']
+      test: ['CMD', 'curl', '-f', 'http://${MINIO_ENDPOINT}/minio/health/live']
       interval: 10s
-      start_interval: 1s
-      start_period: 10s
+      timeout: 5s
+      retries: 5
     security_opt: [no-new-privileges:true]
     networks:
       - backend
@@ -132,6 +130,8 @@ services:
       - ACCEPT_EULA=${SEQ_EULA}
     ports:
       - "${SEQ_PORT}:${SEQ_PORT}" 
+    networks:
+      - backend
 
   prometheus:
     image: prom/prometheus:latest
@@ -139,6 +139,8 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "${PROMETHEUS_PORT}:${PROMETHEUS_PORT}"
+    networks:
+      - backend
 
   grafana:
     image: grafana/grafana:latest
@@ -148,6 +150,11 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
       GF_LOG_MODE: console
       GF_LOG_LEVEL: error
+    depends_on:
+      prometheus:
+        condition: service_started
+    networks:
+      - backend
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter
@@ -156,6 +163,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - backend
 
   redis-exporter:
     image: oliver006/redis_exporter
@@ -164,8 +173,11 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    networks:
+      - backend
 
 volumes:
+  seq_data:
   postgres_data:
   redis_data:
   minio_data:

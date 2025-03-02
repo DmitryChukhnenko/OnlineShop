@@ -19,6 +19,12 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using OnlineShop.Infrastructure.HealthChecks;
 using StackExchange.Redis;
 using OnlineShop.Web.Components;
+using OnlineShop.Infrastructure.Common;
+using FluentValidation.AspNetCore;
+using OnlineShop.Infrastructure.Validators;
+using Microsoft.OpenApi.Models;
+using MediatR;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace OnlineShop.Web.Main;
 public class Program {
@@ -31,7 +37,7 @@ public class Program {
         builder.Host.UseSerilog((context, config) => 
             config.ReadFrom.Configuration(context.Configuration)
                 .Enrich.FromLogContext()
-                .WriteTo.Seq("http://seq"));
+                .WriteTo.Seq("http://seq:5341"));
 
         // 2. База данных
         builder.Services.AddDbContext<ApplicationDbContext>(options => 
@@ -40,33 +46,25 @@ public class Program {
                 b => b.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)
             ));
 
-        // 3. Identity + JWT
+        // 3. Identity + Авторизация
 
-        builder.Services.AddIdentityCore<ApplicationUser>(options => 
-        {
-            options.User.RequireUniqueEmail = true;
-        })
-        .AddRoles<IdentityRole<Guid>>() // Явное указание типа роли
-        .AddEntityFrameworkStores<ApplicationDbContext>()
-        .AddDefaultTokenProviders();
+        builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>()
+            .AddEntityFrameworkStores<ApplicationDbContext>()
+            .AddDefaultTokenProviders();
+        
+        // builder.Services.AddAuthentication(options =>
+        // {
+        //     options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
+        //     options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+        //     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
+        // }).AddCookie(IdentityConstants.ApplicationScheme, options =>
+        // {
+        //     options.LoginPath = "/login"; // Страница входа
+        //     options.AccessDeniedPath = "/access-denied"; // Страница ошибки доступа
+        // });
 
-        var jwtSettings = builder.Configuration.GetSection("Jwt");
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Secret"]!));
-
-        builder.Services.AddAuthentication(options => {
-            options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-            options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-        }).AddJwtBearer(options => {
-            options.TokenValidationParameters = new TokenValidationParameters {
-                ValidateIssuer = true,
-                ValidateAudience = true,
-                ValidateLifetime = true,
-                ValidateIssuerSigningKey = true,
-                ValidIssuer = jwtSettings["Issuer"],
-                ValidAudience = jwtSettings["Audience"],
-                IssuerSigningKey = key
-            };
-        });
+        builder.Services.AddAuthorization();
+        builder.Services.AddHttpContextAccessor();
 
         // 4. Redis
         builder.Services.AddSingleton<IConnectionMultiplexer>(_ => 
@@ -76,35 +74,54 @@ public class Program {
             options.Configuration = builder.Configuration["Redis:Configuration"];
             options.InstanceName = "OnlineShop_";
         });
-
+            
         // 5. Hangfire
         builder.Services.AddHangfire(config => 
-            config.UsePostgreSqlStorage(builder.Configuration.GetConnectionString("HangfireConnection")));
+            config.UsePostgreSqlStorage(options => 
+                options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("HangfireConnection"))));
         builder.Services.AddHangfireServer();
 
         // 6. MinIO
-        builder.Services.AddSingleton<IMinioClient>(new MinioClient()
-            .WithEndpoint(builder.Configuration["MINIO_ENDPOINT"])
-            .WithCredentials(
-                builder.Configuration["MINIO_ACCESS_KEY"],
-                builder.Configuration["MINIO_SECRET_KEY"])
-            .Build());
+        var minioConfig = builder.Configuration.GetSection("Minio");
+        if (minioConfig["Endpoint"] != null) {
+            builder.Services.AddSingleton<IMinioClient>(new MinioClient()
+            .WithEndpoint(minioConfig["Endpoint"])
+            .WithCredentials(minioConfig["AccessKey"], minioConfig["SecretKey"])
+            .Build());  
+            builder.Services.AddScoped<IFileStorageService, MinioFileStorage>();
+        }   
 
         // 7. Application Services
-        builder.Services.AddScoped<IFileStorageService, MinioFileStorage>();
-        builder.Services.AddScoped<IProductService, ProductService>();
         builder.Services.AddScoped<IOrderService, RedisOrderService>();
+        builder.Services
+            .AddScoped<IUnitOfWork, UnitOfWork>()
+            .AddScoped(typeof(IRepository<>), typeof(Repository<>))
+            .AddScoped<ICachingService, CachingService>();
 
         // 8. CQRS
         builder.Services.AddMediatR(cfg => 
-            cfg.RegisterServicesFromAssembly(typeof(OnlineShop.Application.DependencyInjection).Assembly));
-
-        builder.Services.AddValidatorsFromAssembly(typeof(OnlineShop.Application.DependencyInjection).Assembly);
+            cfg.RegisterServicesFromAssembly(typeof(OnlineShop.Application.Products.Commands.CreateProductCommand).Assembly));
+        
+        builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 
         // 9. AutoMapper
-        builder.Services.AddAutoMapper(typeof(OnlineShop.Application.Common.MappingProfile));
+        builder.Services.AddAutoMapper(typeof(OnlineShop.Application.Mappings.ProductProfile).Assembly);
+        //builder.Services.AddAutoMapper( typeof(OnlineShop.Application.Mappings.ProductProfile),
+                                    //    typeof(Application.Mappings.CategoryProfile),
+                                    //    typeof(Application.Mappings.OrderProfile),
+                                    //    typeof(OnlineShop.Application.Mappings.OrderStatusProfile),
+                                    //    typeof(OnlineShop.Application.Mappings.PaymentDetailProfile),
+                                    //    typeof(OnlineShop.Application.Mappings.ProductReviewProfile),
+                                    //    typeof(OnlineShop.Application.Mappings.UserProfile)
+                                    //   );
 
-        // 10. Health Checks
+        // 10 FluentValidation
+
+        builder.Services.AddFluentValidationAutoValidation();
+        builder.Services.AddFluentValidationClientsideAdapters();
+        builder.Services.AddValidatorsFromAssemblyContaining<CreateProductCommandValidator>();
+
+        // 11. Health Checks
         builder.Services.AddSingleton<MinioHealthCheck>();
         builder.Services.AddHealthChecks()
             .AddNpgSql(
@@ -130,14 +147,31 @@ public class Program {
             config.SnackbarConfiguration.VisibleStateDuration = 4000;
         });        
 
+        builder.Services.AddControllers();
+
+        // 12. Swagger
+        builder.Services.AddEndpointsApiExplorer(); // Включаем API Explorer
+        builder.Services.AddSwaggerGen(options =>
+        {
+            options.SwaggerDoc("v1", new OpenApiInfo
+            {
+                Title = "OnlineShop API",
+                Version = "v1",
+                Description = "API для онлайн магазина",
+                Contact = new OpenApiContact
+                {
+                    Name = "Dmitry Chukhnenko",
+                    Email = "DmitryChukhnenko@yandex.ru"
+                }
+            });
+        });
 
         var app = builder.Build();
 
-        // 12. Инициализация базы данных
+        // 13. Инициализация базы данных
         using (var scope = app.Services.CreateScope()) {
             var services = scope.ServiceProvider;
             var logger = services.GetRequiredService<ILogger<Program>>();
-            
             try {
                 var context = services.GetRequiredService<ApplicationDbContext>();
                 // Ждем, пока база станет доступна
@@ -167,18 +201,29 @@ public class Program {
             }
         }
 
-        // 13. Middleware Pipeline
-        if (!app.Environment.IsDevelopment()) {
-            app.UseExceptionHandler("/Error");
-            app.UseHsts();
-        }
-
         app.UseHttpsRedirection();
         app.UseStaticFiles();
         app.UseRouting();
         app.UseAuthentication();
         app.UseAuthorization();
-        app.UseAntiforgery();
+        app.UseAntiforgery();        
+
+        // 14. Middleware Pipeline
+        if (app.Environment.IsDevelopment())
+        {
+            app.UseSwagger(); // Включаем Swagger UI
+            app.UseSwaggerUI(options => {
+                options.SwaggerEndpoint("/swagger/v1/swagger.json", "OnlineShop API v1");
+                options.RoutePrefix = "api-docs"; // Переносим Swagger UI с корня
+            });
+        }
+        else
+        {
+            app.UseExceptionHandler("/Error");
+            app.UseHsts();
+        }
+
+        app.MapControllers();
 
         app.UseSerilogRequestLogging();
         app.UseHangfireDashboard("/hangfire", new DashboardOptions {
@@ -188,12 +233,9 @@ public class Program {
         app.MapHealthChecks("/health");
         app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
-        // 14. Запуск фоновых задач
-        RecurringJob.AddOrUpdate<IProductService>("cleanup-products", 
-            s => s.CleanupOldProductsAsync(), 
-            Cron.Daily);
+        // 15. Запуск фоновых задач
+        // RecurringJob.AddOrUpdate<BackgroundJobService>("Update status", service => service.UpdateOrderStatusAsync(new Guid(("00000000-0000-0000-0000-000000000001"))), Cron.Daily);
 
         app.Run();
-
     }
 }

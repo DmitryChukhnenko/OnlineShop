@@ -1,4 +1,7 @@
-@* <MudDataGrid Items="@products" ReadData="@OnReadData">
+@* @using MudBlazor
+@using OnlineShop.Domain.DTOs
+@using OnlineShop.Infrastructure.Products.Queries
+<MudDataGrid Items="@products" ReadData="@OnReadData">
     <Columns>
         <PropertyColumn Property="@(p => p.Name)" Title="Название"/>
         <TemplateColumn Title="Фото">
@@ -6,15 +9,15 @@
         </TemplateColumn>
         <ActionColumn>
             <MudIconButton Icon="@Icons.Filled.Edit" 
-                           OnClick="@(() => EditProduct(context))"/>
+            OnClick="@(() => EditProduct(context))"/>
         </ActionColumn>
     </Columns>
 </MudDataGrid>
 
 @code {
-    private List<ProductDto> products = new();
-    
-    private async Task OnReadData(GridState<ProductDto> state)
+    private List<ProductDTO> products = new();
+
+    private async Task OnReadData(GridState<ProductDTO> state)
     {
         products = await productService.GetAll();
         StateHasChanged();

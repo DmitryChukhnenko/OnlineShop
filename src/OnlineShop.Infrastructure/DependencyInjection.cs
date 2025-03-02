@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using OnlineShop.Application.Interfaces;
 using OnlineShop.Infrastructure.Services;
 using StackExchange.Redis;
 

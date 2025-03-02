@@ -1,9 +1,9 @@
 using System.Text.Json;
+using OnlineShop.Application.Interfaces;
 using OnlineShop.Domain.Entities;
 
 namespace OnlineShop.Infrastructure.Services;
 
-// Infrastructure/Services/RedisOrderService.cs
 public class RedisOrderService : IOrderService
 {
     private readonly StackExchange.Redis.IDatabase _redis;
@@ -12,6 +12,32 @@ public class RedisOrderService : IOrderService
     public RedisOrderService(StackExchange.Redis.IConnectionMultiplexer redis)
     {
         _redis = redis.GetDatabase();
+    }
+
+    public void AddItem(Order order, Product product, int quantity)
+    {
+        if (product.StockQuantity < quantity)
+            throw new InvalidOperationException("Not enough stock available for this product.");
+        if (quantity <= 0)
+            throw new InvalidOperationException("Quantity must be greater than zero.");
+        
+        order.Items.Add(new OrderItem
+        {
+            ProductId = product.Id,
+            Quantity = quantity,
+            UnitPrice = product.Price
+        });
+        
+        product.StockQuantity -= quantity;
+    }
+    
+    public void RemoveItem(Order order, Guid itemId)
+    {
+        var item = order.Items.FirstOrDefault(i => i.Id == itemId);
+        if (item == null) return;
+        
+        order.Items.Remove(item);
+        item.Product.StockQuantity += item.Quantity;
     }
 
     public async Task<Order?> GetOrderAsync(Guid Id)
@@ -29,11 +55,4 @@ public class RedisOrderService : IOrderService
     }
 
     private static string GetKey(Guid Id) => $"Order:{Id}";
-}
-
-public interface IOrderService
-{
-    public Task<Order?> GetOrderAsync(Guid Id);
-    public Task<Order> UpdateOrderAsync(Order Order);
-
 }
